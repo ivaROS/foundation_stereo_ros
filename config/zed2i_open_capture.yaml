@@ -1,0 +1,14 @@
+foundation_stereo:
+  ros__parameters:
+    backend: "onnx"
+    device: "cpu"
+    model_path: ""
+    left_image_topic: "/zed2i/zed_node/left/image_rect_color"
+    right_image_topic: "/zed2i/zed_node/right/image_rect_color"
+    left_camera_info_topic: "/zed2i/zed_node/left/camera_info"
+    right_camera_info_topic: "/zed2i/zed_node/right/camera_info"
+    sync_queue_size: 5
+    baseline_m: 0.0
+    publish_disparity: true
+    max_disparity_model_px: 192.0
+    intra_op_threads: 6
