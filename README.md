@@ -94,6 +94,27 @@ increase the output-rate limit gradually from 1 Hz to 3 Hz during live use.
 The detailed measurements and visuals are in
 `~/ros2_ws/results/2026-10-19_foundation_cpu_maxspeed/REPORT.md`.
 
+## Depth-validation tools
+
+The reproducible bag analyzers, CPU benchmarks, resource monitor, and model
+comparison utilities live in `scripts/depth_validation/` and are installed with
+this package. This keeps the evaluation code versioned beside the ROS node and
+model integration it validates.
+
+After building and sourcing the workspace, list the available command options
+with, for example:
+
+```bash
+ros2 run foundation_stereo_ros analyze_sequential --help
+ros2 run foundation_stereo_ros benchmark_foundation_cpu --help
+ros2 run foundation_stereo_ros compare_foundation_onnx --help
+```
+
+The ONNX-based commands must run in the CPU virtual environment described under
+Requirements. Generated bags, ONNX models, JSON metrics, plots, and reports stay
+under `~/ros2_ws/results` or the model-output directory; they are intentionally
+not installed or committed with the source package.
+
 The default CPU configuration is deliberately conservative: two ONNX Runtime
 threads and at most one inference start every four seconds. Incoming camera
 frames still use a latest-frame queue, so throttling does not build latency.
