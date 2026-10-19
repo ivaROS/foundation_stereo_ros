@@ -60,6 +60,59 @@ ros2 launch foundation_stereo_ros zed2i_open_capture.launch.py \
   model_path:=/absolute/path/to/model.onnx
 ```
 
+## Validated performance on this platform
+
+The CPU tests below were run on the AMD Ryzen 5 7640HS with two ONNX Runtime
+threads. Each model completed safely under bounded memory and CPU limits.
+
+| Profile | Model input / refinement | Median speed | Peak RSS | Median disagreement vs. large model | Temporal MAD | Intended use |
+|---|---:|---:|---:|---:|---:|---|
+| **Fast (recommended)** | 192×352, 1 iteration, 64 px disparity | **3.93 FPS** | **0.76 GiB** | 6.57 cm | 8.09 mm | Best live CPU performance |
+| Balanced | 256×512, 2 iterations, 192 px disparity | 0.86 FPS | 3.21 GiB | 3.09 cm | 7.22 mm | Better boundaries and thin objects |
+| Large reference | 320×736, 4 iterations, 192 px disparity | 0.43 FPS | 5.61 GiB | Reference | 5.14 mm | Best tested CPU quality; offline or low-rate use |
+
+The large model is the largest configuration validated on this platform. It
+runs safely, but is not practical for responsive live depth. The fast model is
+approximately 9.1× faster and uses 86.5% less memory, at the cost of larger
+errors around boundaries, occlusions, thin structures, and distant surfaces.
+These accuracy numbers measure agreement with the large learned model, not
+metric ground truth.
+
+Recommended fast model:
+
+```text
+~/ros2_ws/src/Fast-FoundationStereo/output_cpu_onnx/
+20_30_48_iters1_192x352_disp64/fast_foundationstereo.onnx
+```
+
+The launch files currently retain the large model as their conservative
+reference default. For practical CPU operation, pass the fast model explicitly
+and set `max_disparity_model_px: 64.0` in the selected YAML configuration so the
+published disparity metadata matches the model. Use two inference threads and
+increase the output-rate limit gradually from 1 Hz to 3 Hz during live use.
+
+The detailed measurements and visuals are in
+`~/ros2_ws/results/2026-10-19_foundation_cpu_maxspeed/REPORT.md`.
+
+The default CPU configuration is deliberately conservative: two ONNX Runtime
+threads and at most one inference start every four seconds. Incoming camera
+frames still use a latest-frame queue, so throttling does not build latency.
+Override the limit only after validating cooling and system stability:
+
+```bash
+ros2 launch foundation_stereo_ros zed2i_open_capture.launch.py \
+  max_inference_rate_hz:=0.5 intra_op_threads:=2
+```
+
+Set `max_inference_rate_hz:=0.0` to remove the rate limit.
+
+Depth output defaults to **0.3–20 m**, matching the supported range of the
+wide-lens ZED 2i. The camera's ideal range is 0.3–12 m; values from 12–20 m are
+retained but should be treated as lower-confidence stereo estimates. Override
+`minimum_depth_m` or `maximum_depth_m` in the YAML configuration when an
+application benefits from tighter filtering. Changing the far cutoff does not
+change FoundationStereo inference speed.
+
 ## Topics
 
 Live ZED inputs:

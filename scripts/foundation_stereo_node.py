@@ -86,12 +86,25 @@ def restore_disparity(
     )
 
 
-def disparity_to_depth(disparity, focal_length_px, baseline_m):
+def disparity_to_depth(
+    disparity,
+    focal_length_px,
+    baseline_m,
+    minimum_depth_m=0.3,
+    maximum_depth_m=20.0,
+):
     output_disparity = disparity.astype(np.float32, copy=True)
     columns = np.arange(output_disparity.shape[1], dtype=np.float32)[None, :]
     output_disparity[(columns - output_disparity) < 0.0] = np.inf
     with np.errstate(divide="ignore", invalid="ignore"):
         depth = np.float32(focal_length_px * baseline_m) / output_disparity
+    outside_range = (
+        ~np.isfinite(depth)
+        | (depth < minimum_depth_m)
+        | (depth > maximum_depth_m)
+    )
+    depth[outside_range] = np.nan
+    output_disparity[outside_range] = np.nan
     return output_disparity, np.ascontiguousarray(depth, dtype=np.float32)
 
 
@@ -125,8 +138,17 @@ class FoundationStereoNode(Node):
         self._max_disparity = float(
             self.declare_parameter("max_disparity_model_px", 192.0).value
         )
+        self._minimum_depth_m = float(
+            self.declare_parameter("minimum_depth_m", 0.3).value
+        )
+        self._maximum_depth_m = float(
+            self.declare_parameter("maximum_depth_m", 20.0).value
+        )
         intra_op_threads = int(
-            self.declare_parameter("intra_op_threads", 6).value
+            self.declare_parameter("intra_op_threads", 2).value
+        )
+        max_inference_rate_hz = float(
+            self.declare_parameter("max_inference_rate_hz", 0.25).value
         )
 
         if backend != "onnx":
@@ -143,6 +165,15 @@ class FoundationStereoNode(Node):
             raise ValueError("sync_queue_size must be at least 1")
         if intra_op_threads < 1:
             raise ValueError("intra_op_threads must be at least 1")
+        if max_inference_rate_hz < 0.0:
+            raise ValueError("max_inference_rate_hz cannot be negative")
+        if (
+            self._minimum_depth_m <= 0.0
+            or self._maximum_depth_m <= self._minimum_depth_m
+        ):
+            raise ValueError(
+                "depth range must satisfy 0 < minimum_depth_m < maximum_depth_m"
+            )
 
         session_options = ort.SessionOptions()
         session_options.graph_optimization_level = (
@@ -167,6 +198,12 @@ class FoundationStereoNode(Node):
         self._work_condition = threading.Condition()
         self._pending_pair = None
         self._stopping = False
+        self._minimum_start_period = (
+            1.0 / max_inference_rate_hz
+            if max_inference_rate_hz > 0.0
+            else 0.0
+        )
+        self._next_inference_start = 0.0
         self._received_pairs = 0
         self._processed_pairs = 0
         self._replaced_pairs = 0
@@ -208,7 +245,7 @@ class FoundationStereoNode(Node):
 
         self.get_logger().info(
             "Loaded backend=%s device=%s model in %.3f s: %dx%d, threads=%d, "
-            "left=%s, right=%s"
+            "max_rate=%.3f Hz, depth_range=%.1f-%.1f m, left=%s, right=%s"
             % (
                 backend,
                 device,
@@ -216,6 +253,9 @@ class FoundationStereoNode(Node):
                 self._model_width,
                 self._model_height,
                 intra_op_threads,
+                max_inference_rate_hz,
+                self._minimum_depth_m,
+                self._maximum_depth_m,
                 left_topic,
                 right_topic,
             )
@@ -260,10 +300,12 @@ class FoundationStereoNode(Node):
     def _queue_stereo_pair(self, left, right):
         with self._work_condition:
             self._received_pairs += 1
+            was_empty = self._pending_pair is None
             if self._pending_pair is not None:
                 self._replaced_pairs += 1
             self._pending_pair = (left, right)
-            self._work_condition.notify()
+            if was_empty:
+                self._work_condition.notify()
 
     def _worker_loop(self):
         while True:
@@ -273,8 +315,18 @@ class FoundationStereoNode(Node):
                 )
                 if self._stopping:
                     return
+                while self._minimum_start_period > 0.0:
+                    delay = self._next_inference_start - time.monotonic()
+                    if delay <= 0.0:
+                        break
+                    self._work_condition.wait(timeout=delay)
+                    if self._stopping:
+                        return
                 left, right = self._pending_pair
                 self._pending_pair = None
+                self._next_inference_start = (
+                    time.monotonic() + self._minimum_start_period
+                )
             try:
                 self._process_pair(left, right)
             except Exception as error:  # Keep later frames alive after one failure.
@@ -334,7 +386,13 @@ class FoundationStereoNode(Node):
             scaled_height,
             scaled_width,
         )
-        disparity, depth = disparity_to_depth(disparity, focal_length, baseline)
+        disparity, depth = disparity_to_depth(
+            disparity,
+            focal_length,
+            baseline,
+            self._minimum_depth_m,
+            self._maximum_depth_m,
+        )
 
         depth_message = self._bridge.cv2_to_imgmsg(depth, encoding="32FC1")
         depth_message.header = left.header

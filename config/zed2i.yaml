@@ -11,4 +11,7 @@ foundation_stereo:
     baseline_m: 0.0
     publish_disparity: true
     max_disparity_model_px: 192.0
-    intra_op_threads: 6
+    minimum_depth_m: 0.3
+    maximum_depth_m: 20.0
+    intra_op_threads: 2
+    max_inference_rate_hz: 0.25

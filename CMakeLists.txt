@@ -12,4 +12,7 @@ install(DIRECTORY config launch
   DESTINATION share/${PROJECT_NAME}
   PATTERN "__pycache__" EXCLUDE)
 
+install(FILES README.md
+  DESTINATION share/${PROJECT_NAME})
+
 ament_package()

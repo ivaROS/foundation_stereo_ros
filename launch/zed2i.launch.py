@@ -5,6 +5,7 @@ from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
+from launch_ros.parameter_descriptions import ParameterValue
 
 
 def generate_launch_description():
@@ -19,6 +20,8 @@ def generate_launch_description():
         [
             DeclareLaunchArgument("config", default_value=default_config),
             DeclareLaunchArgument("model_path", default_value=default_model),
+            DeclareLaunchArgument("intra_op_threads", default_value="2"),
+            DeclareLaunchArgument("max_inference_rate_hz", default_value="0.25"),
             Node(
                 package="foundation_stereo_ros",
                 executable="foundation_stereo_node",
@@ -26,7 +29,16 @@ def generate_launch_description():
                 output="screen",
                 parameters=[
                     LaunchConfiguration("config"),
-                    {"model_path": LaunchConfiguration("model_path")},
+                    {
+                        "model_path": LaunchConfiguration("model_path"),
+                        "intra_op_threads": ParameterValue(
+                            LaunchConfiguration("intra_op_threads"), value_type=int
+                        ),
+                        "max_inference_rate_hz": ParameterValue(
+                            LaunchConfiguration("max_inference_rate_hz"),
+                            value_type=float,
+                        ),
+                    },
                 ],
             ),
         ]
