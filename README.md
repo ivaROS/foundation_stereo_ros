@@ -87,9 +87,16 @@ Recommended fast model:
 
 The launch files currently retain the large model as their conservative
 reference default. For practical CPU operation, pass the fast model explicitly
-and set `max_disparity_model_px: 64.0` in the selected YAML configuration so the
-published disparity metadata matches the model. Use two inference threads and
-increase the output-rate limit gradually from 1 Hz to 3 Hz during live use.
+and pass `max_disparity_model_px:=64.0` to the launch file so the published
+disparity metadata matches the model. Use two inference threads and increase
+the output-rate limit gradually from 1 Hz to 3 Hz during live use.
+
+```bash
+FAST_MODEL=~/ros2_ws/src/Fast-FoundationStereo/output_cpu_onnx/20_30_48_iters1_192x352_disp64/fast_foundationstereo.onnx
+ros2 launch foundation_stereo_ros zed2i_open_capture.launch.py \
+  model_path:="$FAST_MODEL" intra_op_threads:=2 \
+  max_inference_rate_hz:=3.0 max_disparity_model_px:=64.0 rviz:=true
+```
 
 The detailed measurements and visuals are in
 `~/ros2_ws/results/2026-10-19_foundation_cpu_maxspeed/REPORT.md`.

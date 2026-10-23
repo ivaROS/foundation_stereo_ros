@@ -31,7 +31,7 @@ install(PROGRAMS scripts/depth_validation/monitor_process.py
   DESTINATION lib/${PROJECT_NAME}
   RENAME monitor_process)
 
-install(DIRECTORY config launch
+install(DIRECTORY config launch rviz
   DESTINATION share/${PROJECT_NAME}
   PATTERN "__pycache__" EXCLUDE)
 
