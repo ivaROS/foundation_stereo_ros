@@ -12,6 +12,7 @@ from message_filters import Subscriber, TimeSynchronizer
 import numpy as np
 import onnxruntime as ort
 import rclpy
+from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
 from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
 from sensor_msgs.msg import CameraInfo, Image
@@ -330,6 +331,8 @@ class FoundationStereoNode(Node):
             try:
                 self._process_pair(left, right)
             except Exception as error:  # Keep later frames alive after one failure.
+                if self._stopping or not rclpy.ok():
+                    return
                 self.get_logger().error(f"Inference failed: {error}")
 
     def _process_pair(self, left, right):
@@ -452,7 +455,7 @@ def main(args=None):
     try:
         node = FoundationStereoNode()
         rclpy.spin(node)
-    except KeyboardInterrupt:
+    except (KeyboardInterrupt, ExternalShutdownException):
         pass
     except Exception as error:
         if node is not None:
